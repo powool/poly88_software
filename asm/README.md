@@ -12,4 +12,7 @@ records of each copy). I combined multiple copies
 to come up with this one, and although it does start
 and run, it can't assemble programs... :(
 
+ASM_4.4.CAS is my conversion of an older poly88
+assembler. This one has a line number editor.
+
 asm.sh - my lazy bash script to assemble files

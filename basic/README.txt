@@ -20,3 +20,6 @@ PONG.CAS
 	too fast to play on my emulator
 	poly88_tape claims last data ercord is bad, but it is not
 
+GAME TAPE #1/2(for BASIC ver A00)
+Hardware requirements: 16K    800101
+Version 0.0
