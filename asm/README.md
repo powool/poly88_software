@@ -16,3 +16,7 @@ ASM_4.4.CAS is my conversion of an older poly88
 assembler. This one has a line number editor.
 
 asm.sh - my lazy bash script to assemble files
+
+LIFE.ASM, LIFE.CAS and LIFE.hex are from a copy of
+the larger Polymorhphic version originally published
+in the VTI manual. Transcribed by voidstart78.
