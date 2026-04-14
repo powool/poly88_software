@@ -6,11 +6,17 @@ the same output binary that my emulator is using.
 This is not a perfect check, but it is pretty good.
 
 ASM_G02.CAS is my beloved assembler/editor that I spent
-years using. Unfortunately, so far, the magnetic copies
-I have are all incomplete (unrecoverable errors in some
-records of each copy). I combined multiple copies
-to come up with this one, and although it does start
-and run, it can't assemble programs... :(
+years using.
+
+NOTE: My initial commit is a clean commit take directly
+from the Polymorhphics 88 G02 Assembler/Editor tape.
+
+I patched machine location 3464H from F2 (JP) to
+D2 (JNC) because the original conditional check
+fails on larger RAM machines.
+
+As patched, it will load large editor programs.
+
 
 ASM_4.4.CAS is my conversion of an older poly88
 assembler. This one has a line number editor.
