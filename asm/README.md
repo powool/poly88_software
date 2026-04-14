@@ -18,6 +18,10 @@ fails on larger RAM machines.
 As patched, it will load large editor programs.
 
 
+ASM_G02.ASM is a disassmbled version of ASM_G02.CAS.
+It still has hundreds of errors and is included only
+for reference or possibly aiding fixing future bugs.
+
 ASM_4.4.CAS is my conversion of an older poly88
 assembler. This one has a line number editor.
 

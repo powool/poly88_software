@@ -7,27 +7,41 @@
 ; 8085-only mnemonics replaced with .db directives.
 ;====================================================================
 
+WH2	EQU	0C28H	; tape input
+WH3	EQU	0C2CH	; tape output
 
 
 ;====================================================================
 ; ENTRY POINTS AND INITIALIZATION (0x2000)
 ;====================================================================
-
+	ORG	2000H
 cold_start:
 	JMP	init	;Cold start entry point
 warm_start:
 	JMP	j2098	;Warm start / command loop re-entry
-	DB	10H	; was *ARHL
-	NOP
-	MOV	A,A
-	LXI	B,0101H
-	CMC
-	MOV	A,A
-	LDAX	B
-j200f:	CALL	j02ad
-	MVI	D,0AAH
-	MOV	B,B
-	JC	jc900
+L2006:	DB	10H
+L2007:	DB	00H
+L2008:	DB	7FH
+L2009:	DB	01H
+L200A:	DB	01H
+L200B:	DB	01H
+L200C:	DB	3FH
+L200D:	DB	7FH
+L200E:	DB	0AH
+
+j200f:	DB	0CDH
+	DB	0ADH
+	DB	002H
+	DB	016H
+	DB	0AAH
+	DB	040H
+	DB	0DAH
+	DB	000H
+	DB	0C9H
+;j200f:	CALL	j02ad
+;	MVI	D,0AAH
+;	MOV	B,B
+;	JC	jc900
 
 ;====================================================================
 ; UTILITY: COMPARE AND SUBTRACT (0x2018)
@@ -62,7 +76,7 @@ init:	LXI	H,0000H	;Initialize: save SP, size memory, print banner
 	PUSH	H
 	MVI	H,00H
 	MVI	D,00H
-	LDA	2006H
+	LDA	L2006
 	MOV	L,A
 	MOV	E,A
 	DAD	H
@@ -87,13 +101,13 @@ j205a:	MOV	A,M
 	JMP	j205a
 j2067:	DCX	H
 	SHLD	var_mem_top
-	LXI	H,2501H
+	LXI	H,top_mem_str
 	CALL	print_line
 	LDA	var_mem_top
 	INR	A
-	MVI	A,3FH
+	MVI	A,'?'
 	JNZ	j207c
-	MVI	A,2EH
+	MVI	A,'.'
 j207c:	PUSH	PSW
 	LDA	var_mem_top+1
 	CALL	print_hex_byte
@@ -162,7 +176,7 @@ j20ff:	JMP	cmd_loop
 ;====================================================================
 
 read_cmd_line:
-	LXI	H,var_cmd_buf	;Read command line into buffer at (HL)
+	LXI	H,input_command_buf	;Read command line into buffer at (HL)
 	SHLD	var_hex_buf
 	LDA	var_cmd_prompt
 	CALL	mon_char_output
@@ -183,7 +197,7 @@ j211c:	MOV	A,B
 	INX	H
 	JMP	read_char_loop
 j212d:	XCHG
-	LXI	H,var_cmd_buf
+	LXI	H,input_command_buf
 	CALL	cmp_hl_de
 	JZ	read_char_loop
 	XCHG
@@ -200,7 +214,7 @@ print_cr:
 	MVI	A,0DH
 	JMP	mon_char_output
 print_space:
-	MVI	A,20H
+	MVI	A,' '
 	JMP	mon_char_output
 print_tab:
 	MVI	A,09H
@@ -215,7 +229,7 @@ print_string:
 pad_spaces:
 	CMP	L
 	RZ
-	MVI	M,20H
+	MVI	M,' '
 	INX	H
 	JMP	pad_spaces
 cmd_call:
@@ -298,7 +312,7 @@ parse_filename:
 skip_spaces:
 	INX	H
 	MOV	A,M
-	CPI	20H
+	CPI	' '
 	CMC
 	RNC
 	JNZ	skip_spaces
@@ -307,14 +321,14 @@ parse_slashed_name:
 	CALL	parse_next_field
 	CMC
 	RNC
-	CPI	2FH
+	CPI	'/'
 	JNZ	parse_hex_params
 	LXI	D,var_filename1
 	MVI	C,08H
 copy_filename_chars:
 	INX	H
 	MOV	A,M
-	CPI	2FH
+	CPI	'/'
 	JZ	pad_filename
 	DCR	C
 	JM	error_bad_filename
@@ -322,7 +336,7 @@ copy_filename_chars:
 	INX	D
 	JMP	copy_filename_chars
 pad_filename:
-	MVI	A,20H
+	MVI	A,' '
 j21f7:	DCR	C
 	JM	parse_second_part
 	STAX	D
@@ -452,7 +466,7 @@ next_source_line:
 reset_line_counter:
 	MVI	A,0FH	;Reset line counter to 15
 	STA	var_line_counter
-	LDA	200CH
+	LDA	L200C
 	STA	var_print_ctrl
 	RET
 
@@ -487,7 +501,7 @@ print_chars_loop:
 j22f3:	INX	H
 	JMP	print_chars_loop
 expand_tab:
-	MVI	A,20H
+	MVI	A,' '
 	CALL	output_char
 	MOV	A,B
 	ANI	07H
@@ -555,7 +569,7 @@ byte_to_decimal:
 	RET
 
 decimal_digit:
-	MVI	M,2FH
+	MVI	M,'/'
 j2353:	INR	M
 	SUB	B
 	JNC	j2353
@@ -655,120 +669,77 @@ print_error_return:
 	CALL	print_line
 	JMP	j20ff
 error_illegal_cmd:
-	LXI	H,241EH	;Error: Illegal command
+	LXI	H,illegal_command_str	;Error: Illegal command
 	JMP	print_error_return
 
-; === Start of str_illegal_cmd ===
-	DB	'Illegal command
-'
-; === End of str_illegal_cmd ===
+illegal_command_str:
+	DB	'Illegal command',13
 
 error_bad_params:
-	LXI	H,2434H	;Error: Bad parameters
+	LXI	H,bad_param_str	;Error: Bad parameters
 	JMP	print_error_return
 
-; === Start of str_bad_params ===
-	DB	'Bad parameters!
-'
-; === End of str_bad_params ===
+bad_param_str:
+	DB	'Bad parameters!',13
 
 error_bad_filename:
-	LXI	H,244AH	;Error: Bad file name
+	LXI	H,bad_file_str	;Error: Bad file name
 	JMP	print_error_return
 
-; === Start of str_bad_filename ===
-	DB	'Bad file name...
-'
-; === End of str_bad_filename ===
+bad_file_str:
+	DB	'Bad file name...',13
 
 error_checksum:
-	LXI	H,2461H	;Error: checksum error
+	LXI	H,checksum_err_str	;Error: checksum error
 	JMP	print_error_return
 
-; === Start of str_checksum_err ===
-	DB	'aaugh! checksum error...
-'
-; === End of str_checksum_err ===
+checksum_err_str:
+	DB	'aaugh! checksum error...',13
 
 error_line_too_long:
-	LXI	H,2480H	;Error: Line too long
+	LXI	H,line_too_long_str	;Error: Line too long
 	JMP	print_error_return
 
-; === Start of str_line_too_long ===
-	DB	'Line too long
-'
-; === End of str_line_too_long ===
+line_too_long_str:
+	DB	'Line too long',13
 
 print_banner:
-	LXI	H,2494H	;Print assembler banner
+	LXI	H,banner	;Print assembler banner
 	JMP	print_error_return
 
-; === Start of str_banner ===
-	DB	'PolyMorphic Systems Assembler Version G02.
-'
-; === End of str_banner ===
+banner:
+	DB	'PolyMorphic Systems Assembler Version G02.',13
 
 error_forgot_params:
-	LXI	H,24C6H	;Error: You forgot parameters
+	LXI	H,missing_param_str	;Error: You forgot parameters
 	JMP	print_error_return
 
-; === Start of str_forgot_params ===
-	DB	'You forgot parameters!
-'
-; === End of str_forgot_params ===
+missing_param_str:
+	DB	'You forgot parameters!',13
 
+mem_full_str:
+	DB	'uh oh... memory full! (you lose...)',13
 
-; === Start of str_mem_full ===
-	DB	'uh oh... memory full! (you lose...)
-'
-; === End of str_mem_full ===
+top_mem_str:
+	DB	'Top of memory is',13
 
+bytes_free_str:
+	DB	' Bytes Free, starting at ',13
 
-; === Start of str_top_of_mem ===
-	DB	'Top of memory is 
-'
-; === End of str_top_of_mem ===
-
-
-; === Start of str_bytes_free ===
-	DB	' Bytes Free, starting at 
-'
-; === End of str_bytes_free ===
-
-
-; === Start of str_too_many_err ===
-	DB	'Too many assembly errors
-'
-; === End of str_too_many_err ===
-
+too_many_str:
+	DB	'Too many assembly errors',13
 
 ; === Start of str_commands ===
 
-;====================================================================
-; HELP TEXT (0x2546)
-;====================================================================
-
-	DB	'C    ;Commands: header'
-	DB	'ommands:
-'
-; === End of str_commands ===
-
-
-; === Start of str_help_text ===
-	DB	'^    ;Editor help text (control key reference)'
-	DB	'B - Beginning of buffer	^U - Up 
-^E - End of buffer		^D - Down
-^F - Find string		^R - Right
-^H - Help! (Give commands)	^L - Left
-
-^N - Next page			^W - Delete Word
-^P - Previous page		^X - Delete Line
-
-
-	ESC or ALTMD - Leave editor
-'
-; === End of str_help_text ===
-
+help_text:
+	DB	'Commands:',13
+	DB	'^B - Beginning of buffer	^U - Up ',13
+	DB	'^E - End of buffer		^D - Down',13
+	DB	'^F - Find string		^R - Right',13
+	DB	'^H - Help! (Give commands)	^L - Left',13
+	DB	'^N - Next page			^W - Delete Word',13
+	DB	'^P - Previous page		^X - Delete Line',13
+	DB	13,13,'  ESC or ALTMD - Leave editor',13,12
 
 ; === Start of editor_dispatch_tbl ===
 
@@ -776,15 +747,44 @@ error_forgot_params:
 ; EDITOR (0x263A)
 ;====================================================================
 
-	DW	26D6H	;Editor dispatch table: 32 entries for ctrl-A through ctrl-Z + specials
-	DW	26D6H,2871H,2938H,288FH,2867H,2935H,26D6H,2A51H
-	DW	28C3H,288FH,28C3H,2885H,28C3H,291BH,26D6H,2928H
-	DW	26D6H,287DH,26D6H,26D6H,28A0H,26D6H,28FFH,28F0H
-	DW	26D6H,26D6H,26D7H,26D6H,26D6H,26D6H,26D6H
+;Editor dispatch table: 32 entries for ctrl-A through ctrl-Z + specials
+	DW	editor_nop
+	DW	editor_nop
+	DW	move_down_to_fill	; ^B
+	DW	find_string_2	; ^C
+	DW	move_up		; ^D
+	DW	move_up_lines	; ^E
+	DW	find_string	; ^F
+	DW	editor_nop
+	DW	cmd_help	; ^H
+	DW	insert_char	; ^I
+	DW	move_up		; ^J
+	DW	insert_char	; ^K
+	DW	move_left	; ^L
+	DW	insert_char	; ^M
+	DW	page_up_multi	; ^N
+	DW	editor_nop
+	DW	page_down_multi	; ^P
+	DW	editor_nop
+	DW	move_right	; ^R
+	DW	editor_nop
+	DW	editor_nop
+	DW	move_to_next_page	; ^U
+	DW	editor_nop
+	DW	delete_word	; ^W
+	DW	delete_line		; ^X
+	DW	editor_nop
+	DW	editor_nop
+	DW	edit_exit		; ESC
+	DW	editor_nop
+	DW	editor_nop
+	DW	editor_nop
+	DW	editor_nop
 ; === End of editor_dispatch_tbl ===
 
+;Editor init: clear vars, set up screen
 editor_init:
-	XRA	A	;Editor init: clear vars, set up screen
+	XRA	A
 	STA	var_kbd_handler_id
 	LHLD	0C1EH
 	MVI	L,00H
@@ -805,13 +805,17 @@ editor_init:
 	MVI	M,0FFH
 	CALL	move_down_to_fill
 	CALL	editor_clear_screen
+
+;Editor main loop: update display, get key, dispatch
 editor_main_loop:
-	CALL	editor_update_display	;Editor main loop: update display, get key, dispatch
+	CALL	editor_update_display
 	CALL	mon_char_input
 	CALL	editor_dispatch
 	JMP	editor_main_loop
+
+;Editor key dispatch: look up handler in table at $263A
 editor_dispatch:
-	MOV	B,A	;Editor key dispatch: look up handler in table at $263A
+	MOV	B,A
 	CPI	7DH
 	JZ	editor_exit
 	CPI	1CH
@@ -828,10 +832,13 @@ editor_dispatch:
 	MOV	D,M
 	XCHG
 	PCHL
+
+editor_nop:
 	RET
 
+;Exit editor: restore buffer pointers, return to command loop
 editor_exit:
-	CALL	move_up_lines	;Exit editor: restore buffer pointers, return to command loop
+	CALL	move_up_lines
 	LHLD	var_gap_start
 	DCX	H
 	SHLD	var_buf_end
@@ -839,11 +846,14 @@ editor_exit:
 	CALL	mon_char_output
 	CALL	show_free_mem
 	JMP	cmd_loop
+
+;Clear editor screen buffer
 editor_clear_screen:
-	LXI	H,0000H	;Clear editor screen buffer
+	LXI	H,0000H
 	SHLD	var_cursor_pos
 	LHLD	var_gap_start
 	SHLD	var_display_start
+
 editor_fill_screen:
 	LXI	D,screen_template
 	LXI	H,var_cmd_prompt
@@ -854,8 +864,9 @@ j26fe:	XRA	A
 	JNZ	j26fe
 	RET
 
+;Refresh screen display from text buffer
 editor_update_display:
-	LXI	B,0000H	;Refresh screen display from text buffer
+	LXI	B,0000H
 	MVI	A,0FFH
 	STA	3B3FH
 	LHLD	var_display_start
@@ -886,7 +897,7 @@ j273a:	MVI	A,7FH
 	LHLD	var_gap_end
 	INX	H
 	JMP	display_line_loop
-j274c:	MVI	A,20H
+j274c:	MVI	A,' '
 	CALL	j276c
 	JNC	j274c
 	RET
@@ -1114,17 +1125,17 @@ delete_char:
 	SHLD	var_gap_start
 	MOV	A,M
 	JMP	j27b5
-delete_word:
+delete_line:
 	CALL	delete_char
 	RZ
 	LHLD	var_gap_start
 	DCX	H
 	MOV	A,M
 	CPI	0DH
-	JNZ	delete_word
+	JNZ	delete_line
 	RET
 
-delete_alphanumeric:
+delete_word:
 	CALL	delete_char
 	RZ
 	LHLD	var_gap_start
@@ -1133,12 +1144,12 @@ delete_alphanumeric:
 	CPI	30H
 	RC
 	CPI	3AH
-	JC	delete_alphanumeric
+	JC	delete_word
 	ANI	5FH
 	CPI	41H
 	RC
 	CPI	5BH
-	JC	delete_alphanumeric
+	JC	delete_word
 	RET
 
 page_up_multi:
@@ -1163,6 +1174,7 @@ j292a:	PUSH	B
 
 find_string:
 	CALL	search_input
+find_string_2:
 	LHLD	var_gap_end
 	XCHG
 	INX	D
@@ -1317,7 +1329,7 @@ search_done:
 ;====================================================================
 
 cmd_help:
-	LXI	H,2546H
+	LXI	H,help_text
 	MVI	A,0CH
 	CALL	mon_char_output
 j2a59:	MOV	A,M
@@ -1367,7 +1379,7 @@ j2a8b:	CMP	E
 	MOV	E,D
 	MOV	D,C
 	MOV	C,B
-	MVI	B,30H
+	MVI	B,'0'
 	JMP	j2a8b
 
 ;====================================================================
@@ -1411,7 +1423,7 @@ asm_main_loop:
 	LXI	H,var_line_buf
 	MVI	A,9CH
 	CALL	pad_spaces
-	LXI	H,var_cmd_buf
+	LXI	H,input_command_buf
 	MVI	C,0DH
 	CALL	copy_de_to_hl
 	MOV	M,C
@@ -1437,7 +1449,7 @@ j2b25:	LXI	H,var_line_buf
 	JMP	print_line_with_num
 j2b2e:	CALL	clear_params
 	STA	var_asm_pass
-	LXI	H,var_cmd_buf
+	LXI	H,input_command_buf
 	SHLD	var_source_ptr
 	MOV	A,M
 	CPI	20H
@@ -1472,14 +1484,12 @@ j2b5c:	MOV	A,M
 	CMP	M
 	JNC	j2bb0
 	CALL	print_cr
-	LXI	H,2B88H
+	LXI	H,str_symtab_overflow
 	CALL	print_line
 	JMP	cmd_loop
 
-; === Start of str_symtab_overflow ===
-	DB	'Symbol table overflow-assembly aborted!
-'
-; === End of str_symtab_overflow ===
+str_symtab_overflow:
+	DB	'Symbol table overflow-assembly aborted! ',13
 
 j2bb0:	CALL	clear_params
 	CALL	parse_next_field
@@ -1522,14 +1532,14 @@ j2bf8:	CALL	parse_operand
 	CPI	20H
 	RNZ
 j2c06:	SHLD	var_asm_pc
-	LDA	var_cmd_buf
+	LDA	input_command_buf
 	CPI	09H
 	RZ
 	CPI	20H
 	RZ
 	JMP	j2c25
 j2c15:	CALL	parse_operand
-	LDA	var_cmd_buf
+	LDA	input_command_buf
 	CPI	09H
 	JZ	j32ef
 	CPI	20H
@@ -1544,7 +1554,7 @@ j2c2f:	CALL	parse_operand
 	MOV	B,H
 	MOV	C,L
 	JMP	j2ccd
-j2c37:	LDA	var_cmd_buf
+j2c37:	LDA	input_command_buf
 	CPI	3BH
 	RZ
 	LXI	H,3B8EH
@@ -1556,7 +1566,7 @@ j2c37:	LDA	var_cmd_buf
 	INX	H
 	SHLD	3B89H
 	CALL	clear_params
-	LXI	H,var_cmd_buf
+	LXI	H,input_command_buf
 	SHLD	var_source_ptr
 	MOV	A,M
 	CPI	09H
@@ -1694,7 +1704,7 @@ j2d89:	LXI	H,var_line_buf
 	CALL	j2b18
 	LXI	H,var_line_buf
 	MVI	B,0FH
-	MVI	A,20H
+	MVI	A,' '
 j2d96:	MOV	M,A
 	INX	H
 	DCR	B
@@ -1847,8 +1857,8 @@ asm_list_symbol:
 	JMP	asm_start
 j2eb9:	CALL	print_cr
 	CALL	print_cr
-	LXI	H,252DH
-	LDA	3B75H
+	LXI	H,too_man_str
+	LDA	var_error_count+1
 	ORA	A
 	JNZ	j2eef
 	LDA	var_error_count
@@ -1858,7 +1868,7 @@ asm_no_label:
 	LXI	H,6F4EH
 	SHLD	var_hex_buf
 	MVI	A,0DH
-	STA	3B53H
+	STA	var_hex_buf+2
 	JMP	j2ee6
 j2ede:	CALL	byte_to_decimal
 	MVI	A,0DH
@@ -2238,9 +2248,9 @@ j325d:	DCR	C
 emit_byte:
 	STA	5F53H
 	JMP	j3244
-j3266:	CPI	30H
+j3266:	CPI	'0'
 	JC	j32f7
-	CPI	3AH
+	CPI	'9'+1
 	JNC	j3295
 	CALL	j32b1
 	JC	j32f7
@@ -2279,9 +2289,9 @@ j32b1:	CALL	parse_expression
 	DCX	D
 	LDAX	D
 	LXI	B,var_filename2
-	CPI	48H
+	CPI	'H'
 	JZ	j32c9
-	CPI	44H
+	CPI	'D'
 	JNZ	j32c5
 	XRA	A
 	STAX	D
@@ -2294,32 +2304,32 @@ j32c9:	XRA	A
 	CALL	parse_hex
 	RET
 
-j32cf:	MVI	B,52H
-	LXI	H,3324H
+j32cf:	MVI	B,'R'
+	LXI	H,j3324
 	JMP	j3317
-j32d7:	MVI	B,53H
-	LXI	H,3328H
+j32d7:	MVI	B,'S'
+	LXI	H,j3328
 	JMP	j3317
-j32df:	MVI	B,55H
-	LXI	H,3328H
+j32df:	MVI	B,'U'
+	LXI	H,j3328
 	JMP	j3317
-j32e7:	MVI	B,56H
-	LXI	H,3328H
+j32e7:	MVI	B,'V'
+	LXI	H,j3328
 	JMP	j3317
-j32ef:	MVI	B,4DH
-	LXI	H,332EH
+j32ef:	MVI	B,'M'
+	LXI	H,j332e
 	JMP	j3317
-j32f7:	MVI	B,41H
-	LXI	H,3328H
+j32f7:	MVI	B,'A'
+	LXI	H,j3328
 	JMP	j3317
-	MVI	B,4FH
-	LXI	H,3332H
+	MVI	B,'O'
+	LXI	H,j3332
 	JMP	j3317
-j3307:	MVI	B,4CH
-	LXI	H,3332H
+j3307:	MVI	B,'L'
+	LXI	H,j3332
 	JMP	j3317
-j330f:	MVI	B,44H
-	LXI	H,3342H
+j330f:	MVI	B,'D'
+	LXI	H,j3342
 	JMP	j3317
 j3317:	PUSH	H
 	LXI	H,var_line_buf
@@ -2329,14 +2339,18 @@ j3317:	PUSH	H
 	SHLD	var_error_count
 	RET
 
+j3324:
 	LXI	H,0000H
 	RET
 
+j3328:
 	LXI	H,0000H
 	JMP	j32ab
+j332e:
 	CALL	j2b25
 	RET
 
+j3332:
 	LDA	var_asm_pass
 	ORA	A
 	RZ
@@ -2349,8 +2363,10 @@ tape_input:
 	INX	SP
 	RET
 
+j3342:
 	CALL	j2b18
 	JMP	j2bb0
+j3348:
 	IN	01H
 	RAR
 	JC	j335e
@@ -2392,10 +2408,10 @@ cmd_load:
 	PUSH	H
 	LXI	H,j34af
 	SHLD	var_kbd_vector
-j3388:	LXI	H,3348H
+j3388:	LXI	H,j3348
 	SHLD	0C16H
 	LXI	H,3376H
-	LXI	D,j0c28
+	LXI	D,WH2
 	MVI	B,08H
 j3396:	MOV	A,M
 	STAX	D
@@ -2409,9 +2425,9 @@ j3396:	MOV	A,M
 	CALL	cmd_soft
 	CALL	parse_cmd_line
 	LDA	3BA0H
-	CPI	42H
+	CPI	'B'
 	JZ	j33bd
-	CPI	50H
+	CPI	'P'
 	JZ	j33c6
 	JMP	error_bad_params
 j33bd:	CALL	j02ad
@@ -2430,7 +2446,7 @@ j33c6:	CALL	j02ad
 
 j33d1:	MVI	B,00H
 tape_byte_out:
-	CALL	j0c28
+	CALL	WH2
 	STAX	D
 	INX	D
 	PUSH	PSW
@@ -2439,7 +2455,7 @@ tape_byte_out:
 	POP	PSW
 	DCR	C
 	JNZ	tape_byte_out
-	CALL	j0c28
+	CALL	WH2
 	ADD	B
 	RET
 
@@ -2452,10 +2468,10 @@ tape_file_open:
 	CALL	print_cr
 j33f1:	MVI	A,96H
 	OUT	01H
-	CALL	j0c28
+	CALL	WH2
 j33f8:	CPI	0E6H
 	JNZ	j33f1
-	CALL	j0c28
+	CALL	WH2
 	CPI	01H
 	JNZ	j33f8
 	LXI	D,0C60H
@@ -2475,17 +2491,17 @@ j3418:	LDAX	D
 	LDA	0C6AH
 	MOV	C,A
 	LDA	0C6DH
-	CPI	04H
+	CPI	04H	; Data
 	JZ	j3452
-	CPI	02H
+	CPI	02H	; End
 	JZ	j34af
-	CPI	01H
+	CPI	01H	; Comment
 	JZ	j3445
 	JMP	j33f1
 j343c:	CALL	j347c
 	CALL	print_cr
 	JMP	j33f1
-j3445:	CALL	j0c28
+j3445:	CALL	WH2
 	CALL	mon_char_output
 	DCR	C
 	JNZ	j3445
@@ -2516,7 +2532,7 @@ j3481:	MOV	A,M
 	JNZ	j3481
 	RET
 
-j348b:	LXI	H,24DDH
+j348b:	LXI	H,mem_full_str
 	CALL	print_line
 	CALL	print_cr
 	JMP	j34af
@@ -2563,12 +2579,12 @@ cmd_dump:
 	CALL	print_string
 	CALL	j03aa
 	PUSH	H
-	LXI	H,3543H
+	LXI	H,str_start_addr
 	CALL	print_string
 	CALL	j03aa
 	SHLD	3B4FH
 	CALL	print_cr
-	LXI	H,3528H
+	LXI	H,str_working_start
 	CALL	print_line
 	CALL	print_space
 	CALL	j34b9
@@ -2581,35 +2597,26 @@ cmd_dump:
 	XCHG
 	LHLD	var_end_addr
 	DB	0C3H,0C3H
-str_working_start:
 	DCR	M
 
-; === Start of str_working ===
-	DB	'W    ;Working... message'
-	DB	'orking...
+;Working... message
+str_working_start:
+	DB	'Working...',13,13
 
-'
-; === End of str_working ===
+;Load address? prompt
+str_load_addr:
+	DB	'Load address? ',0
 
-
-; === Start of str_load_addr ===
-	DB	'L    ;Load address? prompt'
-	DB	'oad address?  '
-; === End of str_load_addr ===
-
-	DCR	C
-
-; === Start of str_start_addr ===
-	DB	'S    ;Start address? prompt'
-	DB	'tart address?  '
-; === End of str_start_addr ===
+str_start_addr:
+;Start address? prompt
+	DB	13,'Start address? ',0
 
 cmd_save:
 	LXI	H,j34af	;SAVE command: save file to tape
 	SHLD	var_kbd_vector
 	CALL	j3388
 	CALL	print_cr
-	LXI	H,3528H
+	LXI	H,str_working_start
 	CALL	print_line
 	CALL	print_cr
 	CALL	j34b9
@@ -2672,13 +2679,13 @@ j35e6:	MOV	A,M
 	ADD	B
 	MOV	B,A
 	POP	PSW
-	CALL	j0c2c
+	CALL	WH3
 	DCR	C
 	JNZ	j35e6
 	MOV	A,B
 	CMA
 	INR	A
-	CALL	j0c2c
+	CALL	WH3
 	RET
 
 j35fa:	PUSH	H
@@ -2718,11 +2725,11 @@ j362a:	DCX	H
 	JNZ	j362a
 	MVI	C,20H
 j3632:	MVI	A,0E6H
-	CALL	j0c2c
+	CALL	WH3
 	DCR	C
 	JNZ	j3632
 	MVI	A,01H
-	CALL	j0c2c
+	CALL	WH3
 	MVI	A,0EH
 	LXI	H,0C60H
 	CALL	j35e3
@@ -2735,9 +2742,9 @@ j3632:	MVI	A,0E6H
 	LHLD	0C68H
 	INX	H
 	SHLD	0C68H
-	CALL	j0c2c
-	CALL	j0c2c
-	CALL	j0c2c
+	CALL	WH3
+	CALL	WH3
+	CALL	WH3
 	XRA	A
 	OUT	01H
 	RET
@@ -2751,13 +2758,13 @@ tape_char_io:
 	CPI	0DH
 	JNZ	j36c7
 	CALL	j36c5
-	LDA	2009H
+	LDA	L2009
 	MOV	L,A
-	LDA	2008H
+	LDA	L2008
 j3683:	CALL	j36c5
 	DCR	L
 	JNZ	j3683
-	LDA	200EH
+	LDA	L200EH
 	CALL	j36c5
 	LDA	var_print_ctrl
 	DCR	A
@@ -2767,16 +2774,16 @@ j3683:	CALL	j36c5
 j369c:	CALL	j36c5
 	LDA	var_print_ctrl
 	MOV	L,A
-	LDA	200CH
+	LDA	L200C
 	STA	var_print_ctrl
 	MOV	A,L
 	ORA	A
 	JNZ	j36b4
-	LDA	200BH
+	LDA	L200B
 	JMP	j36b7
-j36b4:	LDA	200AH
+j36b4:	LDA	L200A
 j36b7:	MOV	L,A
-	LDA	200DH
+	LDA	L200D
 j36bb:	CALL	j36c5
 	DCR	L
 	JNZ	j36bb
@@ -3060,7 +3067,7 @@ var_asm_option:
 var_line_buf:
 	DB	00H,00H,00H,00H,00H,00H,00H,00H
 	DB	00H,00H,00H,00H,00H,00H,00H,00H
-var_cmd_buf:
+input_command_buf:
 	DB	44H	;Command input buffer
 	DB	55H,4DH,50H,50H,20H,2FH,41H,53H
 	DB	4DH,2FH,20H,32H,30H,30H,30H,20H
@@ -3155,5 +3162,5 @@ var_symbol_area:
 ; var_scan_ptr			EQU	3B85H
 ; var_asm_option		EQU	3B87H
 ; var_line_buf			EQU	3B8CH
-; var_cmd_buf			EQU	3B9CH
+; input_command_buf			EQU	3B9CH
 ; var_symbol_area		EQU	3D00H
